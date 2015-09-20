@@ -17,24 +17,28 @@ class SudokuCell(object):
         self.row = None
         self.column = None
         self.box = None
+        self._neighbors = None
 
     def update_potential_values(self):
         """ Update the potential values of this cell based on the values of neighboring cells. """
         if self.value is None:
             self.potential_values = [c for c in "123456789"]
-            for cell in self.neighbors():
+            for cell in self.neighbors:
                 if cell.value in self.potential_values:
                     self.potential_values.remove(cell.value)
         else:
             self.potential_values = [self.value]
 
+    @property
     def neighbors(self):
         """ Neighboring cells share the same row, column or box. """
-        cells = set()
-        for group in (self.row, self.column, self.box):
-            for cell in group:
-                cells.add(cell)
-        return cells
+        if self._neighbors is None:
+            if self.row is not None and self.column is not None and self.box is not None:
+                self._neighbors = set()
+                for group in (self.row, self.column, self.box):
+                    for cell in group:
+                        self._neighbors.add(cell)
+        return self._neighbors
 
     def __str__(self):
         return "-" if self.value is None else self.value
@@ -153,7 +157,7 @@ def solve1(board, inference_depth, verbose):
             solved_cell.value = solved_cell.potential_values[0]
             if verbose:
                 sys.stderr.write("{}solving {} as {} (only potential value)\n".format("  " * inference_depth, solved_cell.coords, solved_cell.value))
-            for cell in solved_cell.neighbors():
+            for cell in solved_cell.neighbors:
                 cell.update_potential_values()
     return solved_cell is not None
 
@@ -168,12 +172,13 @@ def solve2(board, inference_depth, verbose):
                     for val in cell.potential_values:
                         cells_with_potential_values[val].append(cell)
             for val in cells_with_potential_values:
+                # If there is only one cell that can take this value in the group, then assign the value.
                 if len(cells_with_potential_values[val]) == 1:
                     solved_cell = cells_with_potential_values[val][0]
                     solved_cell.value = val
                     if verbose:
                         sys.stderr.write("{}solving {} as {} (potential value is unique in group)\n".format("  " * inference_depth, solved_cell.coords, solved_cell.value))
-                    for cell in solved_cell.neighbors():
+                    for cell in solved_cell.neighbors:
                         cell.update_potential_values()
     return solved_cell is not None
 
@@ -195,6 +200,8 @@ def solve3(board, inference_depth, verbose):
             board, solved = solve(state2, inference_depth + 1, verbose)
             if solved:
                 return board, True
+            # If both guesses failed to produce a valid game state and the initial state 
+            # is the result of a previous inference, then the previous inference has failed.
             if inference_depth > 0:
                 return board, False
     if verbose:
@@ -241,7 +248,6 @@ def main():
     board, solved = solve(board, verbose=args["verbose"])
     elapsed = time.time() - start
     assert board.is_legal()
-
 
     if solved:
         print "Solved!"
