@@ -9,6 +9,7 @@ import urllib2
 from collections import defaultdict, Counter
 
 class SudokuCell(object):
+    """ A single cell in a Sudoku board. May have a defined value or potential values. """
     def __init__(self, value, coords):
         self.value = value
         self.coords = coords
@@ -18,16 +19,17 @@ class SudokuCell(object):
         self.box = None
 
     def update_potential_values(self):
+        """ Update the potential values of this cell based on the values of neighboring cells. """
         if self.value is None:
             self.potential_values = [c for c in "123456789"]
-            for group in (self.row, self.column, self.box):
-                for cell in group:
-                    if cell.value in self.potential_values:
-                        self.potential_values.remove(cell.value)
+            for cell in self.neighbors():
+                if cell.value in self.potential_values:
+                    self.potential_values.remove(cell.value)
         else:
             self.potential_values = [self.value]
 
     def neighbors(self):
+        """ Neighboring cells share the same row, column or box. """
         cells = set()
         for group in (self.row, self.column, self.box):
             for cell in group:
@@ -38,6 +40,7 @@ class SudokuCell(object):
         return "-" if self.value is None else self.value
 
 class SudokuCellGroup(object):
+    """ A row, column or box of nine Sudoku cells. """
     def __init__(self, cells):
         self._cells = cells
 
@@ -48,12 +51,15 @@ class SudokuCellGroup(object):
         return ",".join(str(c) for c in self._cells)
 
 class SudokuBoard(object):
-        
+    """ A Sudoku game state. """
     def __init__(self):
         self._matrix = []
 
     @staticmethod
     def create_with_file(path):
+        """ Initialize the board with the contents of a file. The expected format of the input file 
+            is a nine line file with nine characters per line. 1-9 represent solved cells while "-" 
+            represents a blank."""
         board = SudokuBoard()
         with open(path, "r") as f:
             lines = f.readlines()
@@ -72,6 +78,7 @@ class SudokuBoard(object):
 
     @staticmethod
     def create_from_web_sudoku(level):
+        """ Download a puzzle from websudoku.com. There are four difficulty levels. """
         board = SudokuBoard()
         url = "http://backup.websudoku.com/?level={}".format(level)
         soup = BeautifulSoup.BeautifulSoup(urllib2.urlopen(url).read())
@@ -105,6 +112,7 @@ class SudokuBoard(object):
                 cell.box = box
 
     def is_legal(self):
+        """ A legal game state is one where all rows, columns and boxes contain only one of each possible value. """
         for groups in (self.rows(), self.columns(), self.boxes()):
             for group in groups:
                 value_counter = Counter(c.value for c in group if c.value is not None)
@@ -136,7 +144,7 @@ class SudokuBoard(object):
         return "\n".join("".join(str(c) for c in row) for row in self.rows())
 
 def solve1(board, inference_depth, verbose):
-    # Solve any cells for which there is only one potential value.
+    """ Solve any cells for which there is only one potential value. """
     solved_cell = None
     for cell in board.cells():
         cell.update_potential_values()
@@ -150,7 +158,7 @@ def solve1(board, inference_depth, verbose):
     return solved_cell is not None
 
 def solve2(board, inference_depth, verbose):
-    # Solve any cells for which one of the potential values is unique within its group.
+    """ Solve any cells for which one of the potential values is unique within its group. """
     solved_cell = None
     for groups in (board.rows(), board.columns(), board.boxes()):
         for group in groups:
@@ -170,7 +178,7 @@ def solve2(board, inference_depth, verbose):
     return solved_cell is not None
 
 def solve3(board, inference_depth, verbose):
-    # Try both values for any cells that have two potential values and attempt to solve the puzzle for each resulting board.
+    """ Try both values for any cells that have two potential values and attempt to solve the puzzle for each resulting board. """
     for cell in board.cells():
         if cell.value is None and len(cell.potential_values) == 2:
             state1 = board.clone()
@@ -194,12 +202,16 @@ def solve3(board, inference_depth, verbose):
     return board, False
 
 def solve(board, inference_depth=0, verbose=False):
+    """ Solve a Sudoku board using the solve1, solve2 and solve3 algorithms. Returns the final board state and whether the board was solved. """
     solved_cell = True
+
+    # Solve all cells that have an immediate solution (only one potential value, or a potential value that is unique in the group)
     while not board.solved() and solved_cell:
         while solved_cell:
             solved_cell = solve1(board, inference_depth, verbose)
         solved_cell = solve2(board, inference_depth, verbose)
 
+    # If no cells have an immediate solution, explore both possibilities for any cells that have two potential values. 
     if not board.solved():
         return solve3(board, inference_depth, verbose)
     else:
